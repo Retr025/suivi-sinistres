@@ -1,0 +1,884 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Suivi Sinistres & Restitutions — Demathieu Bard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ─────────────────────────────────────────────
+   CONFIGURATION — modifie uniquement ce bloc
+   ───────────────────────────────────────────── */
+/*
+  ÉTAPE 1 : Remplace les deux valeurs ci-dessous
+  par les informations de ton site SharePoint.
+
+  SITE_URL  → L'URL de ton site SharePoint,
+              ex: https://demathieubard.sharepoint.com/sites/FlotteAuto
+  LIST_NAME → Le nom exact de la liste que tu as créée,
+              ex: SuiviSinistres
+*/
+
+:root {
+  --bg: #f4f2ee;
+  --surface: #ffffff;
+  --surface2: #f9f8f5;
+  --border: #e2dfd8;
+  --border2: #ccc9c0;
+  --text: #1a1916;
+  --text2: #6b6860;
+  --text3: #9c9a93;
+  --accent: #1a4a6b;
+  --accent-light: #e8f0f7;
+  --accent2: #c44b1e;
+  --accent2-light: #fdf0eb;
+  --green: #2d6a4f;
+  --green-light: #eaf4ee;
+  --amber: #9b6800;
+  --amber-light: #fef7e0;
+  --red: #c0392b;
+  --red-light: #fdecea;
+  --radius: 10px;
+  --radius-sm: 6px;
+  --shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); font-size: 14px; min-height: 100vh; }
+
+/* ── Config banner ── */
+#config-banner { background: #fff3cd; border-bottom: 2px solid #ffc107; padding: 12px 2rem; font-size: 13px; color: #664d03; display: flex; align-items: center; gap: 10px; }
+#config-banner strong { font-weight: 600; }
+#config-banner code { background: rgba(0,0,0,0.08); padding: 2px 6px; border-radius: 4px; font-family: 'DM Mono', monospace; font-size: 12px; }
+#config-banner.hidden { display: none; }
+
+/* ── Header ── */
+.header { background: var(--accent); color: white; padding: 0 2rem; display: flex; align-items: center; justify-content: space-between; height: 58px; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 12px rgba(0,0,0,0.15); }
+.header-logo { font-size: 13px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.95; display: flex; align-items: center; gap: 10px; }
+.header-logo span { opacity: 0.5; font-weight: 300; }
+.header-right { display: flex; align-items: center; gap: 12px; }
+.header-nav { display: flex; gap: 4px; }
+.nav-btn { background: transparent; border: none; color: rgba(255,255,255,0.7); padding: 7px 14px; border-radius: var(--radius-sm); cursor: pointer; font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 500; transition: all 0.15s; }
+.nav-btn:hover { background: rgba(255,255,255,0.1); color: white; }
+.nav-btn.active { background: rgba(255,255,255,0.18); color: white; }
+.sync-status { font-size: 11px; color: rgba(255,255,255,0.6); display: flex; align-items: center; gap: 5px; white-space: nowrap; }
+.sync-dot { width: 7px; height: 7px; border-radius: 50%; background: #4ade80; flex-shrink: 0; }
+.sync-dot.loading { background: #fbbf24; animation: pulse 1s infinite; }
+.sync-dot.error { background: #f87171; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+/* ── Layout ── */
+.main { max-width: 1400px; margin: 0 auto; padding: 2rem; }
+.view { display: none; }
+.view.active { display: block; }
+
+/* ── Cards ── */
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.5rem; box-shadow: var(--shadow); }
+.card-sm { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem 1.25rem; box-shadow: var(--shadow); }
+
+/* ── KPI Grid ── */
+.kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
+.kpi { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.25rem 1.5rem; box-shadow: var(--shadow); position: relative; overflow: hidden; }
+.kpi::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: var(--accent); }
+.kpi.green::before { background: var(--green); }
+.kpi.amber::before { background: #e6a817; }
+.kpi.red::before { background: var(--red); }
+.kpi-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text3); margin-bottom: 6px; }
+.kpi-val { font-size: 26px; font-weight: 300; color: var(--text); font-family: 'DM Mono', monospace; line-height: 1; }
+.kpi-sub { font-size: 12px; color: var(--text3); margin-top: 4px; }
+
+/* ── Section titles ── */
+.section-title { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text3); margin-bottom: 1rem; }
+
+/* ── Filters bar ── */
+.filters-wrap { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 1.5rem; align-items: center; }
+.filters-wrap select, .filters-wrap input { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 7px 12px; font-family: 'DM Sans', sans-serif; font-size: 13px; color: var(--text); outline: none; transition: border-color 0.15s; height: 36px; }
+.filters-wrap select:focus, .filters-wrap input:focus { border-color: var(--accent); }
+.filters-wrap select { cursor: pointer; min-width: 200px; }
+.filters-wrap input { min-width: 220px; }
+.btn-reset { background: transparent; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 7px 14px; cursor: pointer; font-size: 13px; color: var(--text2); font-family: 'DM Sans', sans-serif; transition: all 0.15s; height: 36px; }
+.btn-reset:hover { border-color: var(--border2); color: var(--text); }
+.filters-count { margin-left: auto; font-size: 12px; color: var(--text3); font-family: 'DM Mono', monospace; }
+
+/* ── Table ── */
+.table-wrap { overflow-x: auto; border-radius: var(--radius); border: 1px solid var(--border); box-shadow: var(--shadow); }
+table { width: 100%; border-collapse: collapse; background: var(--surface); font-size: 13px; }
+thead { background: var(--surface2); }
+th { padding: 10px 14px; text-align: left; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text3); border-bottom: 1px solid var(--border); white-space: nowrap; cursor: pointer; user-select: none; }
+th:hover { color: var(--text2); }
+td { padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+tr:last-child td { border-bottom: none; }
+tr:hover td { background: var(--surface2); }
+.td-mono { font-family: 'DM Mono', monospace; font-size: 12px; }
+.empty-row td { text-align: center; padding: 3rem; color: var(--text3); }
+
+/* ── Badges ── */
+.badge { display: inline-flex; align-items: center; padding: 3px 9px; border-radius: 20px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+.badge-sinistre { background: var(--accent2-light); color: var(--accent2); }
+.badge-restitution { background: var(--accent-light); color: var(--accent); }
+.badge-oui { background: var(--green-light); color: var(--green); }
+.badge-non { background: var(--red-light); color: var(--red); }
+.badge-ok { background: var(--green-light); color: var(--green); }
+.badge-pending { background: var(--amber-light); color: var(--amber); }
+
+/* ── Entity table ── */
+.entity-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.entity-table th { padding: 8px 14px; text-align: right; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text3); border-bottom: 1px solid var(--border); }
+.entity-table th:first-child { text-align: left; }
+.entity-table td { padding: 10px 14px; border-bottom: 1px solid var(--border); text-align: right; }
+.entity-table td:first-child { text-align: left; font-weight: 500; }
+.entity-table tr:last-child td { border-bottom: none; }
+.entity-table tr:hover td { background: var(--surface2); }
+.num-right { font-family: 'DM Mono', monospace; font-size: 12px; }
+.total-row td { font-weight: 600; background: var(--surface2); border-top: 2px solid var(--border2); font-family: 'DM Mono', monospace; font-size: 12px; }
+.total-row td:first-child { font-family: 'DM Sans', sans-serif; font-size: 13px; }
+
+/* ── Form ── */
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; }
+.form-full { grid-column: 1 / -1; }
+.form-group { display: flex; flex-direction: column; gap: 5px; }
+.form-group label { font-size: 12px; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: 0.05em; }
+.form-group input, .form-group select, .form-group textarea {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: 9px 12px; font-family: 'DM Sans', sans-serif; font-size: 14px; color: var(--text);
+  outline: none; transition: border-color 0.15s; width: 100%;
+}
+.form-group input:focus, .form-group select:focus, .form-group textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(26,74,107,0.08); }
+.form-group textarea { resize: vertical; min-height: 80px; }
+.form-section { margin-bottom: 2rem; }
+.form-section-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--accent); margin-bottom: 1rem; padding-bottom: 8px; border-bottom: 2px solid var(--accent-light); display: flex; align-items: center; gap: 8px; }
+.form-section-title .dot { width: 8px; height: 8px; background: var(--accent); border-radius: 50%; }
+.form-section-title.accent2 { color: var(--accent2); border-bottom-color: var(--accent2-light); }
+.form-section-title.accent2 .dot { background: var(--accent2); }
+.btn-primary { background: var(--accent); color: white; border: none; border-radius: var(--radius-sm); padding: 10px 24px; font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.15s; display: inline-flex; align-items: center; gap: 8px; }
+.btn-primary:hover { background: #15395a; }
+.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-secondary { background: transparent; color: var(--text2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 20px; font-family: 'DM Sans', sans-serif; font-size: 14px; cursor: pointer; transition: all 0.15s; }
+.btn-secondary:hover { border-color: var(--border2); color: var(--text); }
+.btn-danger { background: transparent; color: var(--red); border: 1px solid var(--red-light); border-radius: var(--radius-sm); padding: 5px 10px; font-size: 12px; cursor: pointer; font-family: 'DM Sans', sans-serif; transition: all 0.15s; }
+.btn-danger:hover { background: var(--red-light); }
+.btn-edit { background: transparent; color: var(--accent); border: 1px solid var(--accent-light); border-radius: var(--radius-sm); padding: 5px 10px; font-size: 12px; cursor: pointer; font-family: 'DM Sans', sans-serif; transition: all 0.15s; }
+.btn-edit:hover { background: var(--accent-light); }
+.form-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid var(--border); }
+
+/* ── Alerts ── */
+.alert { padding: 12px 16px; border-radius: var(--radius-sm); font-size: 13px; margin-bottom: 1rem; }
+.alert.success { background: var(--green-light); color: var(--green); border: 1px solid #b7dfc8; }
+.alert.error { background: var(--red-light); color: var(--red); border: 1px solid #f5c0bb; }
+.alert.info { background: var(--accent-light); color: var(--accent); border: 1px solid #b5d4f4; }
+.alert.hidden { display: none; }
+
+/* ── Charts ── */
+.chart-bars { display: flex; flex-direction: column; gap: 10px; margin-top: 1rem; }
+.chart-row { display: flex; align-items: center; gap: 12px; }
+.chart-label { font-size: 11px; color: var(--text2); width: 190px; flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right; }
+.chart-track { flex: 1; height: 22px; background: var(--surface2); border-radius: 4px; overflow: hidden; }
+.chart-fill { height: 100%; border-radius: 4px; display: flex; align-items: center; padding-left: 8px; font-size: 11px; font-weight: 600; color: white; font-family: 'DM Mono', monospace; min-width: 4px; transition: width 0.5s; white-space: nowrap; }
+.chart-fill.blue { background: var(--accent); }
+.chart-fill.orange { background: var(--accent2); }
+
+/* ── Spinner ── */
+.spinner { width: 18px; height: 18px; border: 2px solid rgba(255,255,255,0.3); border-top-color: white; border-radius: 50%; animation: spin 0.7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.spinner.dark { border-color: rgba(26,74,107,0.2); border-top-color: var(--accent); }
+
+/* ── Loading overlay ── */
+.loading-state { display: flex; align-items: center; justify-content: center; padding: 4rem; gap: 12px; color: var(--text3); font-size: 13px; }
+
+/* ── Page header ── */
+.page-header { margin-bottom: 2rem; }
+.page-title { font-size: 22px; font-weight: 300; color: var(--text); letter-spacing: -0.02em; }
+.page-subtitle { font-size: 13px; color: var(--text3); margin-top: 4px; }
+.top-row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem; margin-bottom: 2rem; }
+.dash-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 2rem; }
+.export-btn { background: transparent; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 7px 14px; cursor: pointer; font-size: 12px; color: var(--text2); font-family: 'DM Sans', sans-serif; display: inline-flex; align-items: center; gap: 6px; transition: all 0.15s; }
+.export-btn:hover { border-color: var(--border2); color: var(--text); }
+
+@media (max-width: 900px) { .dash-grid { grid-template-columns: 1fr; } }
+@media (max-width: 768px) {
+  .main { padding: 1rem; }
+  .form-grid { grid-template-columns: 1fr; }
+  .kpi-grid { grid-template-columns: 1fr 1fr; }
+  .filters-wrap { flex-direction: column; align-items: stretch; }
+  .chart-label { width: 110px; font-size: 10px; }
+}
+</style>
+</head>
+<body>
+
+
+
+<header class="header">
+  <div class="header-logo">
+    Demathieu Bard <span>|</span> Suivi Sinistres & Restitutions
+  </div>
+  <div class="header-right">
+    <div class="sync-status" id="sync-status">
+      <div class="sync-dot loading" id="sync-dot"></div>
+      <span id="sync-label">Connexion…</span>
+    </div>
+    <nav class="header-nav">
+      <button class="nav-btn active" onclick="showView('dashboard')">Tableau de bord</button>
+      <button class="nav-btn" onclick="showView('liste')">Liste</button>
+      <button class="nav-btn" onclick="showView('saisie')">+ Nouveau</button>
+    </nav>
+  </div>
+</header>
+
+<main class="main">
+
+  <!-- ══════════════ DASHBOARD ══════════════ -->
+  <div id="view-dashboard" class="view active">
+    <div class="top-row">
+      <div class="page-header" style="margin-bottom:0">
+        <h1 class="page-title">Tableau de bord</h1>
+        <p class="page-subtitle" id="dash-date">Chargement des données…</p>
+      </div>
+      <button class="export-btn" onclick="exportCSV()">↓ Exporter CSV</button>
+    </div>
+    <div class="kpi-grid" id="kpi-grid"><div class="loading-state"><div class="spinner dark"></div> Chargement…</div></div>
+    <div class="dash-grid">
+      <div class="card">
+        <p class="section-title">Montants réparations par entité</p>
+        <div class="chart-bars" id="chart-reparations"><div class="loading-state" style="padding:1rem"><div class="spinner dark"></div></div></div>
+      </div>
+      <div class="card">
+        <p class="section-title">Coûts restitutions par entité</p>
+        <div class="chart-bars" id="chart-restitutions"><div class="loading-state" style="padding:1rem"><div class="spinner dark"></div></div></div>
+      </div>
+    </div>
+    <div class="card">
+      <p class="section-title">Récapitulatif par entité</p>
+      <div style="overflow-x:auto">
+        <table class="entity-table">
+          <thead><tr>
+            <th>Entité</th><th>Sinistres</th><th>Restitutions</th>
+            <th>Mnt devis (HT)</th><th>Mnt factures (HT)</th>
+            <th>Coût restitution</th><th>Total dépenses</th>
+          </tr></thead>
+          <tbody id="entity-tbody"><tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--text3)">Chargement…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════ LISTE ══════════════ -->
+  <div id="view-liste" class="view">
+    <div class="top-row">
+      <div class="page-header" style="margin-bottom:0">
+        <h1 class="page-title">Liste des dossiers</h1>
+        <p class="page-subtitle" id="liste-count"></p>
+      </div>
+      <button class="export-btn" onclick="exportCSV()">↓ Exporter CSV</button>
+    </div>
+    <div class="card-sm" style="margin-bottom:1.5rem;">
+      <div class="filters-wrap">
+        <select id="f-entite" onchange="renderListe()"><option value="">Toutes les entités</option></select>
+        <select id="f-type" onchange="renderListe()">
+          <option value="">Sinistre & Restitution</option>
+          <option value="Sinistre">Sinistre</option>
+          <option value="Restitution">Restitution</option>
+        </select>
+        <select id="f-constat" onchange="renderListe()">
+          <option value="">Constat : tous</option>
+          <option value="Oui">Constat Oui</option>
+          <option value="Non">Constat Non</option>
+        </select>
+        <select id="f-validation" onchange="renderListe()">
+          <option value="">Validation : toutes</option>
+          <option value="Oui">Validé</option>
+          <option value="Non">Non validé</option>
+        </select>
+        <input type="text" id="f-search" placeholder="🔍  Immat., garage, n° devis…" oninput="renderListe()">
+        <button class="btn-reset" onclick="resetFilters()">Réinitialiser</button>
+        <span class="filters-count" id="filters-count"></span>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th onclick="sortListe('DateReception')">Date ↕</th>
+          <th onclick="sortListe('Entite')">Entité ↕</th>
+          <th>Immatriculation</th>
+          <th>Type</th>
+          <th>N° Devis</th>
+          <th>Garage / Loueur</th>
+          <th onclick="sortListe('MontantDevis')">Montant devis ↕</th>
+          <th>N° Facture</th>
+          <th onclick="sortListe('MontantFacture')">Montant facture ↕</th>
+          <th>Coût restit.</th>
+          <th>Constat</th>
+          <th>Validation</th>
+          <th>Actions</th>
+        </tr></thead>
+        <tbody id="liste-tbody"><tr class="empty-row"><td colspan="13">Chargement des données…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ══════════════ SAISIE ══════════════ -->
+  <div id="view-saisie" class="view">
+    <div class="page-header">
+      <h1 class="page-title" id="form-title">Nouveau dossier</h1>
+      <p class="page-subtitle">Remplissez les champs correspondants au type de dossier</p>
+    </div>
+    <div id="alert-box" class="alert hidden"></div>
+    <div class="card">
+      <div class="form-section">
+        <div class="form-section-title"><div class="dot"></div> Informations générales</div>
+        <div class="form-grid">
+          <div class="form-group"><label>Date de réception *</label><input type="date" id="f-date" required></div>
+          <div class="form-group"><label>Entité *</label>
+            <select id="f-entite-form" required>
+              <option value="">— Sélectionner —</option>
+            </select>
+          </div>
+          <div class="form-group"><label>Immatriculation *</label><input type="text" id="f-immat" placeholder="ex: AB-123-CD" required></div>
+          <div class="form-group"><label>Type de dossier *</label>
+            <select id="f-type-form" required onchange="toggleFormSections()">
+              <option value="">— Sélectionner —</option>
+              <option value="Sinistre">Sinistre</option>
+              <option value="Restitution">Restitution</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div id="section-reparation" class="form-section" style="display:none">
+        <div class="form-section-title"><div class="dot"></div> Réparation</div>
+        <div class="form-grid">
+          <div class="form-group"><label>N° de devis</label><input type="text" id="f-ndevis" placeholder="ex: D-2024-001"></div>
+          <div class="form-group"><label>Nom du garage</label><input type="text" id="f-garage"></div>
+          <div class="form-group"><label>Montant devis HT/TTC (€)</label><input type="number" id="f-montant-devis" placeholder="0.00" step="0.01" min="0"></div>
+          <div class="form-group"><label>N° de facture</label><input type="text" id="f-nfacture"></div>
+          <div class="form-group"><label>Montant facture HT/TTC (€)</label><input type="number" id="f-montant-facture" placeholder="0.00" step="0.01" min="0"></div>
+          <div class="form-group"><label>Constat à faire</label>
+            <select id="f-constat-form"><option value="">—</option><option value="Oui">Oui</option><option value="Non">Non</option></select>
+          </div>
+          <div class="form-group"><label>Validation flotte auto</label>
+            <select id="f-validation-form"><option value="">—</option><option value="Oui">Oui</option><option value="Non">Non</option></select>
+          </div>
+          <div class="form-group form-full"><label>Détails des dégâts</label><textarea id="f-degats" placeholder="Description des dégâts…"></textarea></div>
+        </div>
+      </div>
+
+      <div id="section-restitution" class="form-section" style="display:none">
+        <div class="form-section-title accent2"><div class="dot"></div> Restitution</div>
+        <div class="form-grid">
+          <div class="form-group"><label>Coût restitution loueur (€)</label><input type="number" id="f-cout-restit" placeholder="0.00" step="0.01" min="0"></div>
+          <div class="form-group"><label>Nom du loueur</label><input type="text" id="f-loueur"></div>
+          <div class="form-group form-full"><label>Éléments facturés</label><textarea id="f-elements" placeholder="Détail des éléments facturés…"></textarea></div>
+        </div>
+      </div>
+
+      <div class="form-actions">
+        <button class="btn-secondary" onclick="resetForm()">Annuler</button>
+        <button class="btn-primary" id="btn-save" onclick="saveDossier()">
+          <span id="btn-save-label">Enregistrer le dossier</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<script>
+// ═══════════════════════════════════════════════════
+//  ⚙️  CONFIGURATION — À MODIFIER AVANT DÉPLOIEMENT
+// ═══════════════════════════════════════════════════
+const SHAREPOINT_SITE_URL = "https://demathieubard.sharepoint.com/sites/Flotteauto";
+const LIST_NAME = "SuiviSinistres";
+//  Doit correspondre exactement au nom de la liste créée dans SharePoint
+
+// ═══════════════════════════════════════════════════
+
+const ENTITES = [
+  "DEMATHIEU BARD GESTION","DEMATHIEU BARD HOLDING 4","ANDRE BTP",
+  "DEMATHIEU BARD SOCIETE DE MATERIEL","DEMATHIEU BARD CONSTRUCTION SUD OUEST",
+  "DEMATHIEU BARD BATIMENT SUD EST","DEMATHIEU BARD BATIMENT ILE DE France",
+  "DEMATHIEU BARD GENIE CIVIL","DEMATHIEU BARD CONSTRUCTION ALSACE",
+  "DEMATHIEU BARD CONSTRUCTION NORD","DEMATHIEU BARD CONSTRUCTION CHAMPAGNE",
+  "DEMATHIEU BARD MARNE LA VALLEE",
+  "DEMATHIEU BARD CONSTRUCTION DIRECTION REGIONALE EST",
+  "DEMATHIEU BARD CONSTRUCTION AGENCE LORRAINE"
+];
+
+// ─── Mapping colonnes SP ───────────────────────────
+// Clé interne → Nom interne de la colonne SharePoint
+const COL = {
+  date:            "DateReception",
+  entite:          "Entite",
+  immat:           "Immatriculation",
+  type:            "TypeDossier",
+  ndevis:          "NumeroDevis",
+  garage:          "NomGarage",
+  montant_devis:   "MontantDevis",
+  nfacture:        "NumeroFacture",
+  montant_facture: "MontantFacture",
+  constat:         "ConstatAFaire",
+  validation:      "ValidationFlotte",
+  degats:          "DetailsDegats",
+  cout_restit:     "CoutRestitution",
+  loueur:          "NomLoueur",
+  elements:        "ElementsFactures"
+};
+
+let data = [];
+let editId = null;
+let listeSortKey = 'DateReception';
+let listeSortDir = -1;
+let requestDigest = null;
+
+// ─── Vérif config ──────────────────────────────────
+function isConfigured() {
+  return !SHAREPOINT_SITE_URL.includes("VOTRE-DOMAINE") && !LIST_NAME.includes("SuiviSinistres".length < 3);
+}
+
+// ─── API SharePoint ────────────────────────────────
+const API = () => `${SHAREPOINT_SITE_URL}/_api/web/lists/getbytitle('${LIST_NAME}')`;
+const HEADERS_GET = { "Accept": "application/json;odata=verbose" };
+
+async function getDigest() {
+  if (requestDigest) return requestDigest;
+  try {
+    const hiddenDigest = document.getElementById('__REQUESTDIGEST');
+    if (hiddenDigest && hiddenDigest.value && hiddenDigest.value !== 'undefined') {
+      requestDigest = hiddenDigest.value;
+      setTimeout(() => { requestDigest = null; }, 25 * 60 * 1000);
+      return requestDigest;
+    }
+    const r = await fetch(`${SHAREPOINT_SITE_URL}/_api/contextinfo`, {
+      method: "POST",
+      headers: { "Accept": "application/json;odata=verbose", "Content-Type": "application/json;odata=verbose" },
+      credentials: "include"
+    });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const json = await r.json();
+    requestDigest = json.d.GetContextWebInformation.FormDigestValue;
+    setTimeout(() => { requestDigest = null; }, 25 * 60 * 1000);
+    return requestDigest;
+  } catch(e) {
+    console.error("Digest error:", e);
+    throw e;
+  }
+}
+
+function spToLocal(item) {
+  // Convertit un item SharePoint vers le format interne de l'app
+  return {
+    id: String(item.ID || item.Id),
+    date:            item[COL.date] ? item[COL.date].substring(0, 10) : '',
+    entite:          item[COL.entite] || '',
+    immat:           item[COL.immat] || '',
+    type:            item[COL.type] || '',
+    ndevis:          item[COL.ndevis] || '',
+    garage:          item[COL.garage] || '',
+    montant_devis:   item[COL.montant_devis] != null ? item[COL.montant_devis] : '',
+    nfacture:        item[COL.nfacture] || '',
+    montant_facture: item[COL.montant_facture] != null ? item[COL.montant_facture] : '',
+    constat:         item[COL.constat] || '',
+    validation:      item[COL.validation] || '',
+    degats:          item[COL.degats] || '',
+    cout_restit:     item[COL.cout_restit] != null ? item[COL.cout_restit] : '',
+    loueur:          item[COL.loueur] || '',
+    elements:        item[COL.elements] || ''
+  };
+}
+
+function localToSp(d) {
+  const body = { __metadata: { type: `SP.Data.${LIST_NAME}ListItem` } };
+  if (d.date)            body[COL.date]            = d.date + "T00:00:00Z";
+  if (d.entite)          body[COL.entite]          = d.entite;
+  if (d.immat)           body[COL.immat]           = d.immat;
+  if (d.type)            body[COL.type]            = d.type;
+  body[COL.ndevis]          = d.ndevis || null;
+  body[COL.garage]          = d.garage || null;
+  body[COL.montant_devis]   = d.montant_devis !== '' ? parseFloat(d.montant_devis) : null;
+  body[COL.nfacture]        = d.nfacture || null;
+  body[COL.montant_facture] = d.montant_facture !== '' ? parseFloat(d.montant_facture) : null;
+  body[COL.constat]         = d.constat || null;
+  body[COL.validation]      = d.validation || null;
+  body[COL.degats]          = d.degats || null;
+  body[COL.cout_restit]     = d.cout_restit !== '' ? parseFloat(d.cout_restit) : null;
+  body[COL.loueur]          = d.loueur || null;
+  body[COL.elements]        = d.elements || null;
+  return body;
+}
+
+async function fetchItems() {
+  setSyncStatus('loading', 'Synchronisation…');
+  try {
+    const cols = Object.values(COL).join(',');
+    const url = `${API()}/items?$select=ID,${cols}&$orderby=ID desc&$top=5000`;
+    const r = await fetch(url, { headers: HEADERS_GET, credentials: "include" });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const json = await r.json();
+    data = (json.d.results || []).map(spToLocal);
+    setSyncStatus('ok', `${data.length} dossier(s) — ${new Date().toLocaleTimeString('fr-FR')}`);
+    return true;
+  } catch(e) {
+    setSyncStatus('error', 'Erreur de connexion');
+    console.error("SP fetch error:", e);
+    return false;
+  }
+}
+
+async function createItem(d) {
+  const digest = await getDigest();
+  const r = await fetch(`${API()}/items`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Accept": "application/json;odata=verbose",
+      "Content-Type": "application/json;odata=verbose",
+      "X-RequestDigest": digest
+    },
+    body: JSON.stringify(localToSp(d))
+  });
+  if (!r.ok) { const err = await r.text(); throw new Error(err); }
+  const json = await r.json();
+  return String(json.d.ID);
+}
+
+async function updateItem(spId, d) {
+  const digest = await getDigest();
+  const r = await fetch(`${API()}/items(${spId})`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Accept": "application/json;odata=verbose",
+      "Content-Type": "application/json;odata=verbose",
+      "X-RequestDigest": digest,
+      "X-HTTP-Method": "MERGE",
+      "If-Match": "*"
+    },
+    body: JSON.stringify(localToSp(d))
+  });
+  if (!r.ok && r.status !== 204) { const err = await r.text(); throw new Error(err); }
+}
+
+async function deleteItem(spId) {
+  const digest = await getDigest();
+  const r = await fetch(`${API()}/items(${spId})`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Accept": "application/json;odata=verbose",
+      "X-RequestDigest": digest,
+      "X-HTTP-Method": "DELETE",
+      "If-Match": "*"
+    }
+  });
+  if (!r.ok && r.status !== 204) throw new Error(`HTTP ${r.status}`);
+}
+
+// ─── UI helpers ────────────────────────────────────
+function setSyncStatus(state, label) {
+  const dot = document.getElementById('sync-dot');
+  dot.className = 'sync-dot' + (state === 'loading' ? ' loading' : state === 'error' ? ' error' : '');
+  document.getElementById('sync-label').textContent = label;
+}
+
+function showView(v) {
+  document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('active'));
+  document.getElementById('view-' + v).classList.add('active');
+  document.querySelectorAll('.nav-btn')[['dashboard','liste','saisie'].indexOf(v)].classList.add('active');
+  if (v === 'dashboard') renderDashboard();
+  if (v === 'liste') renderListe();
+  if (v === 'saisie' && !editId) resetForm();
+}
+
+function showAlert(type, msg) {
+  const el = document.getElementById('alert-box');
+  el.className = `alert ${type}`;
+  el.textContent = msg;
+  if (type === 'success') setTimeout(() => el.className = 'alert hidden', 3000);
+}
+
+function toggleFormSections() {
+  const t = document.getElementById('f-type-form').value;
+  document.getElementById('section-reparation').style.display = t === 'Sinistre' ? 'block' : 'none';
+  document.getElementById('section-restitution').style.display = t === 'Restitution' ? 'block' : 'none';
+}
+
+function fmt(v) {
+  if (v === null || v === undefined || v === '') return '—';
+  return new Intl.NumberFormat('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v) + ' €';
+}
+function fmtDate(d) {
+  if (!d) return '—';
+  const p = d.split('-');
+  return `${p[2]}/${p[1]}/${p[0]}`;
+}
+function n(v) { return parseFloat(v) || 0; }
+
+// ─── Dashboard ─────────────────────────────────────
+function renderDashboard() {
+  document.getElementById('dash-date').textContent =
+    `${data.length} dossier(s) — Mis à jour le ${new Date().toLocaleDateString('fr-FR', {day:'2-digit',month:'long',year:'numeric'})}`;
+
+  const totalDevis   = data.reduce((s,d) => s + n(d.montant_devis), 0);
+  const totalFact    = data.reduce((s,d) => s + n(d.montant_facture), 0);
+  const totalRestit  = data.reduce((s,d) => s + n(d.cout_restit), 0);
+  const sinistres    = data.filter(d => d.type === 'Sinistre').length;
+  const restitutions = data.filter(d => d.type === 'Restitution').length;
+  const nonValide    = data.filter(d => d.validation === 'Non').length;
+  const fmt0 = v => new Intl.NumberFormat('fr-FR', {maximumFractionDigits:0}).format(v);
+
+  document.getElementById('kpi-grid').innerHTML = `
+    <div class="kpi"><div class="kpi-label">Total dossiers</div><div class="kpi-val">${data.length}</div><div class="kpi-sub">${sinistres} sinistres · ${restitutions} restitutions</div></div>
+    <div class="kpi"><div class="kpi-label">Total devis HT</div><div class="kpi-val">${fmt0(totalDevis)} €</div><div class="kpi-sub">Montant estimé réparations</div></div>
+    <div class="kpi green"><div class="kpi-label">Total factures HT</div><div class="kpi-val">${fmt0(totalFact)} €</div><div class="kpi-sub">Montant facturé réparations</div></div>
+    <div class="kpi amber"><div class="kpi-label">Coûts restitutions</div><div class="kpi-val">${fmt0(totalRestit)} €</div><div class="kpi-sub">Total coûts loueurs</div></div>
+    <div class="kpi ${nonValide>0?'red':''}"><div class="kpi-label">Non validés</div><div class="kpi-val">${nonValide}</div><div class="kpi-sub">En attente validation flotte</div></div>
+    <div class="kpi"><div class="kpi-label">Total dépenses</div><div class="kpi-val">${fmt0(totalFact+totalRestit)} €</div><div class="kpi-sub">Factures + Restitutions</div></div>`;
+
+  const renderChart = (id, getter, colorClass) => {
+    const withData = ENTITES.filter(e => data.some(d => d.entite === e));
+    if (!withData.length) { document.getElementById(id).innerHTML = '<p style="color:var(--text3);font-size:13px;padding:1rem 0">Aucune donnée</p>'; return; }
+    const maxVal = Math.max(...withData.map(e => getter(e)), 1);
+    document.getElementById(id).innerHTML = withData
+      .sort((a,b) => getter(b)-getter(a))
+      .map(e => {
+        const val = getter(e);
+        const pct = Math.max((val/maxVal)*100, val>0?2:0);
+        const short = e.replace('DEMATHIEU BARD ','DB ').replace('CONSTRUCTION ','C. ');
+        const label = val > 0 ? new Intl.NumberFormat('fr-FR',{maximumFractionDigits:0}).format(val)+' €' : '';
+        return `<div class="chart-row"><div class="chart-label" title="${e}">${short}</div><div class="chart-track"><div class="chart-fill ${colorClass}" style="width:${pct}%">${label}</div></div></div>`;
+      }).join('');
+  };
+  renderChart('chart-reparations', e => data.filter(d=>d.entite===e).reduce((s,d)=>s+n(d.montant_devis),0), 'blue');
+  renderChart('chart-restitutions', e => data.filter(d=>d.entite===e).reduce((s,d)=>s+n(d.cout_restit),0), 'orange');
+
+  let rows = '', totD=0, totF=0, totR=0, totS=0, totRe=0;
+  ENTITES.forEach(e => {
+    const rowsE = data.filter(d => d.entite === e);
+    if (!rowsE.length) return;
+    const sd = rowsE.filter(d=>d.type==='Sinistre').length;
+    const rd = rowsE.filter(d=>d.type==='Restitution').length;
+    const dv = rowsE.reduce((s,x)=>s+n(x.montant_devis),0);
+    const fa = rowsE.reduce((s,x)=>s+n(x.montant_facture),0);
+    const re = rowsE.reduce((s,x)=>s+n(x.cout_restit),0);
+    totS+=sd; totRe+=rd; totD+=dv; totF+=fa; totR+=re;
+    const fmtN = v => v ? new Intl.NumberFormat('fr-FR',{maximumFractionDigits:2}).format(v)+' €' : '—';
+    const shortE = e.length>40 ? e.substring(0,38)+'…' : e;
+    rows += `<tr><td title="${e}">${shortE}</td><td class="num-right">${sd||'—'}</td><td class="num-right">${rd||'—'}</td><td class="num-right">${fmtN(dv)}</td><td class="num-right">${fmtN(fa)}</td><td class="num-right">${fmtN(re)}</td><td class="num-right" style="font-weight:600">${fmtN(fa+re)}</td></tr>`;
+  });
+  const fmtN = v => new Intl.NumberFormat('fr-FR',{maximumFractionDigits:2}).format(v)+' €';
+  if (!rows) rows = `<tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--text3)">Aucune donnée — commencez par saisir un dossier</td></tr>`;
+  else rows += `<tr class="total-row"><td>TOTAL</td><td>${totS}</td><td>${totRe}</td><td>${fmtN(totD)}</td><td>${fmtN(totF)}</td><td>${fmtN(totR)}</td><td>${fmtN(totF+totR)}</td></tr>`;
+  document.getElementById('entity-tbody').innerHTML = rows;
+}
+
+// ─── Liste ─────────────────────────────────────────
+function sortListe(key) {
+  listeSortDir = listeSortKey === key ? listeSortDir * -1 : -1;
+  listeSortKey = key;
+  renderListe();
+}
+
+function renderListe() {
+  const fEnt  = document.getElementById('f-entite').value;
+  const fType = document.getElementById('f-type').value;
+  const fCon  = document.getElementById('f-constat').value;
+  const fVal  = document.getElementById('f-validation').value;
+  const fSrch = document.getElementById('f-search').value.toLowerCase().trim();
+
+  let filtered = data.filter(d => {
+    if (fEnt  && d.entite    !== fEnt)  return false;
+    if (fType && d.type      !== fType) return false;
+    if (fCon  && d.constat   !== fCon)  return false;
+    if (fVal  && d.validation !== fVal) return false;
+    if (fSrch) {
+      const hay = [d.immat, d.garage, d.ndevis, d.nfacture, d.loueur, d.degats].join(' ').toLowerCase();
+      if (!hay.includes(fSrch)) return false;
+    }
+    return true;
+  });
+
+  filtered.sort((a, b) => {
+    let va = a[listeSortKey] || '', vb = b[listeSortKey] || '';
+    if (['MontantDevis','MontantFacture','CoutRestitution'].includes(listeSortKey)) { va = n(va); vb = n(vb); }
+    return va < vb ? -listeSortDir : va > vb ? listeSortDir : 0;
+  });
+
+  document.getElementById('filters-count').textContent = `${filtered.length} / ${data.length} dossiers`;
+  document.getElementById('liste-count').textContent = `${filtered.length} dossier(s) affiché(s) sur ${data.length} au total`;
+
+  const tbody = document.getElementById('liste-tbody');
+  if (!filtered.length) { tbody.innerHTML = '<tr class="empty-row"><td colspan="13">Aucun dossier ne correspond aux filtres</td></tr>'; return; }
+  tbody.innerHTML = filtered.map(d => {
+    const typeBadge = d.type === 'Sinistre'
+      ? `<span class="badge badge-sinistre">Sinistre</span>`
+      : `<span class="badge badge-restitution">Restitution</span>`;
+    const constat  = d.constat    ? `<span class="badge ${d.constat==='Oui'?'badge-oui':'badge-non'}">${d.constat}</span>` : '—';
+    const valid    = d.validation ? `<span class="badge ${d.validation==='Oui'?'badge-ok':'badge-pending'}">${d.validation==='Oui'?'Validé':'En attente'}</span>` : '—';
+    const garage   = d.type === 'Sinistre' ? (d.garage||'—') : (d.loueur||'—');
+    const shortEnt = (d.entite||'').replace('DEMATHIEU BARD ','DB ').replace('CONSTRUCTION ','C. ');
+    return `<tr>
+      <td class="td-mono">${fmtDate(d.date)}</td>
+      <td title="${d.entite}" style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${shortEnt}</td>
+      <td class="td-mono">${d.immat||'—'}</td>
+      <td>${typeBadge}</td>
+      <td class="td-mono">${d.ndevis||'—'}</td>
+      <td>${garage}</td>
+      <td class="td-mono">${fmt(d.montant_devis)}</td>
+      <td class="td-mono">${d.nfacture||'—'}</td>
+      <td class="td-mono">${fmt(d.montant_facture)}</td>
+      <td class="td-mono">${d.cout_restit ? fmt(d.cout_restit) : '—'}</td>
+      <td>${constat}</td>
+      <td>${valid}</td>
+      <td style="white-space:nowrap">
+        <button class="btn-edit" onclick="editDossier('${d.id}')">Modifier</button>
+        <button class="btn-danger" onclick="deleteDossier('${d.id}')">Suppr.</button>
+      </td></tr>`;
+  }).join('');
+}
+
+function resetFilters() {
+  ['f-entite','f-type','f-constat','f-validation'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('f-search').value = '';
+  renderListe();
+}
+
+// ─── Formulaire ────────────────────────────────────
+function resetForm() {
+  editId = null;
+  document.getElementById('form-title').textContent = 'Nouveau dossier';
+  document.getElementById('alert-box').className = 'alert hidden';
+  ['f-date','f-immat','f-ndevis','f-garage','f-nfacture','f-degats','f-loueur','f-elements'].forEach(id => { const el=document.getElementById(id); if(el) el.value=''; });
+  ['f-montant-devis','f-montant-facture','f-cout-restit'].forEach(id => { const el=document.getElementById(id); if(el) el.value=''; });
+  ['f-entite-form','f-type-form','f-constat-form','f-validation-form'].forEach(id => { const el=document.getElementById(id); if(el) el.value=''; });
+  document.getElementById('section-reparation').style.display = 'none';
+  document.getElementById('section-restitution').style.display = 'none';
+  setBtnSave(false, 'Enregistrer le dossier');
+}
+
+function setBtnSave(loading, label) {
+  const btn = document.getElementById('btn-save');
+  if (!btn) return;
+  btn.disabled = loading;
+  btn.innerHTML = loading
+    ? `<div class="spinner"></div> ${label}`
+    : `<span id="btn-save-label">${label}</span>`;
+}
+
+function editDossier(id) {
+  const d = data.find(x => x.id === id);
+  if (!d) return;
+  editId = id;
+  showView('saisie');
+  document.getElementById('form-title').textContent = 'Modifier le dossier';
+  document.getElementById('f-date').value = d.date || '';
+  document.getElementById('f-entite-form').value = d.entite || '';
+  document.getElementById('f-immat').value = d.immat || '';
+  document.getElementById('f-type-form').value = d.type || '';
+  toggleFormSections();
+  document.getElementById('f-ndevis').value = d.ndevis || '';
+  document.getElementById('f-garage').value = d.garage || '';
+  document.getElementById('f-montant-devis').value = d.montant_devis || '';
+  document.getElementById('f-nfacture').value = d.nfacture || '';
+  document.getElementById('f-montant-facture').value = d.montant_facture || '';
+  document.getElementById('f-constat-form').value = d.constat || '';
+  document.getElementById('f-validation-form').value = d.validation || '';
+  document.getElementById('f-degats').value = d.degats || '';
+  document.getElementById('f-cout-restit').value = d.cout_restit || '';
+  document.getElementById('f-loueur').value = d.loueur || '';
+  document.getElementById('f-elements').value = d.elements || '';
+}
+
+async function deleteDossier(id) {
+  if (!confirm('Supprimer ce dossier ? Cette action est irréversible.')) return;
+  try {
+    await deleteItem(id);
+    data = data.filter(x => x.id !== id);
+    renderListe();
+    renderDashboard();
+    setSyncStatus('ok', `${data.length} dossier(s)`);
+  } catch(e) {
+    alert('Erreur lors de la suppression : ' + e.message);
+  }
+}
+
+async function saveDossier() {
+  const date   = document.getElementById('f-date').value;
+  const entite = document.getElementById('f-entite-form').value;
+  const immat  = document.getElementById('f-immat').value.trim();
+  const type   = document.getElementById('f-type-form').value;
+  if (!date || !entite || !immat || !type) {
+    showAlert('error', '✖ Veuillez remplir les champs obligatoires : Date, Entité, Immatriculation, Type.');
+    return;
+  }
+  const d = {
+    id: editId || null, date, entite, immat, type,
+    ndevis:          document.getElementById('f-ndevis').value.trim(),
+    garage:          document.getElementById('f-garage').value.trim(),
+    montant_devis:   document.getElementById('f-montant-devis').value,
+    nfacture:        document.getElementById('f-nfacture').value.trim(),
+    montant_facture: document.getElementById('f-montant-facture').value,
+    constat:         document.getElementById('f-constat-form').value,
+    validation:      document.getElementById('f-validation-form').value,
+    degats:          document.getElementById('f-degats').value.trim(),
+    cout_restit:     document.getElementById('f-cout-restit').value,
+    loueur:          document.getElementById('f-loueur').value.trim(),
+    elements:        document.getElementById('f-elements').value.trim(),
+  };
+  setBtnSave(true, editId ? 'Mise à jour…' : 'Enregistrement…');
+  try {
+    if (editId) {
+      await updateItem(editId, d);
+      const idx = data.findIndex(x => x.id === editId);
+      data[idx] = { ...d, id: editId };
+      showAlert('success', '✔ Dossier mis à jour avec succès.');
+    } else {
+      const newId = await createItem(d);
+      d.id = newId;
+      data.unshift(d);
+      showAlert('success', '✔ Dossier créé avec succès.');
+    }
+    setSyncStatus('ok', `${data.length} dossier(s)`);
+    setBtnSave(false, 'Enregistrer le dossier');
+    setTimeout(() => { resetForm(); showView('liste'); }, 1200);
+  } catch(e) {
+    showAlert('error', '✖ Erreur SharePoint : ' + e.message);
+    setBtnSave(false, 'Enregistrer le dossier');
+  }
+}
+
+// ─── Export CSV ────────────────────────────────────
+function exportCSV() {
+  const headers = ['Date','Entité','Immatriculation','Type','N°Devis','Garage','Montant devis','Détails dégâts','Constat','Validation flotte','N°Facture','Montant facture','Coût restitution','Loueur','Éléments facturés'];
+  const rows = data.map(d => [d.date,d.entite,d.immat,d.type,d.ndevis,d.garage,d.montant_devis,d.degats,d.constat,d.validation,d.nfacture,d.montant_facture,d.cout_restit,d.loueur,d.elements].map(v=>`"${(v||'').toString().replace(/"/g,'""')}"`).join(';'));
+  const csv = '\uFEFF' + [headers.join(';'), ...rows].join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+  a.download = `suivi_sinistres_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+}
+
+// ─── Init ──────────────────────────────────────────
+function initSelects() {
+  const el = document.getElementById('f-entite-form');
+  ENTITES.forEach(e => { const o=document.createElement('option'); o.value=e; o.textContent=e; el.appendChild(o); });
+  const ef = document.getElementById('f-entite');
+  ENTITES.forEach(e => { const o=document.createElement('option'); o.value=e; o.textContent=e; ef.appendChild(o); });
+}
+
+async function init() {
+  initSelects();
+  const ok = await fetchItems();
+  if (ok) { renderDashboard(); renderListe(); }
+  // Rafraîchissement automatique toutes les 60 secondes
+  setInterval(async () => {
+    await fetchItems();
+    const activeView = document.querySelector('.view.active')?.id;
+    if (activeView === 'view-dashboard') renderDashboard();
+    if (activeView === 'view-liste') renderListe();
+  }, 60000);
+}
+
+init();
+</script>
+</body>
+</html>
